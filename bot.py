@@ -8,6 +8,7 @@ import json
 
 API_URL = 'https://api.jsonbin.io/v3/b/649749cd9d312622a3750331'
 API_KEY = os.environ.get('API_KEY', None)
+global status, shop, order
 status = ''
 shop = -1
 order = -1
@@ -18,6 +19,7 @@ logging.basicConfig(
 )
 
 def get_data():
+    global status, shop, order
     headers = {'X-Master-Key': API_KEY}
     response = requests.get(API_URL, headers=headers)
 
@@ -33,6 +35,7 @@ def get_data():
         print(response.text)
 
 def store_data():
+    global status, shop, order
     headers = {'X-Master-Key': API_KEY, 'Content-Type': 'application/json'}
     response = requests.put(
         API_URL,
@@ -51,20 +54,34 @@ def store_data():
 
 
 async def get_status(update, context):
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Shop: {}\nOrder: {}".format(shop, order))
+    global status, shop, order
+    text = "Order: {}\nShop: {}\n Status: {}".format(order, shop, status)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
 async def set_shop(update, context):
+    global shop
     shop = update.message.text.partition(' ')[2]
     store_data()
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Shop changed to {}".format(shop))
 
 async def set_order(update, context):
+    global order
     order = update.message.text.partition(' ')[2]
     store_data()
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Order changed to {}".format(order))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Hi,\nI will notify you once your fotoparadies order is ready.")
+
+
+async def update(update, context):
+    global shop, order
+    url = "https://spot.photoprintit.com/spotapi/orderInfo/forShop?config=1320&shop={}&order={}".format(shop, order)
+    response = requests.request("GET", url, data={})
+    data = json.loads(response.text)
+
+    text = "Order: {}\n{}\n{}\n{}\n{}".format(data["orderNo"], data["summaryStateCode"], data["summaryStateText"], data["summaryPrice"], data["summaryPriceText"])
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(os.environ.get('TOKEN', None)).build()
@@ -75,5 +92,6 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('set_shop', set_shop))
     application.add_handler(CommandHandler('set_order', set_order))
     application.add_handler(CommandHandler('status', get_status))
+    application.add_handler(CommandHandler('update', update))
     
     application.run_polling()
